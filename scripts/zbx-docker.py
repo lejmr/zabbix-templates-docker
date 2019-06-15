@@ -28,7 +28,7 @@ def _cache_data(fp, client, contid):
   return data
 
 def _get_stats(client, contid):
-  fp = os.path.join(CACHE_PATH, "zbx_docker_stats.cache")
+  fp = os.path.join(CACHE_PATH, "zbx_docker_stats_{}.cache".format(contid))
   if not os.path.exists(fp):   
     return _cache_data(fp, client, contid)
   if time.time() - os.stat(fp).st_mtime > CACHE_TIME_S:
@@ -41,6 +41,7 @@ def _get_attrs(client, contid):
 
 def get_mem(client, contid, tp="usage"):
   stats = _get_stats(client, contid)
+  print(stats)
   extp = None
   if "/" in tp:
     tp, extp = tp.split("/")[:2]
