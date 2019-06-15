@@ -71,6 +71,8 @@ if __name__ == "__main__":
 
   # Handle arguments
   allowed = ["discovery", "mem", "cpu", "net", "blkio"]
+  if len(sys.argv) < 2:
+    _zbx_unsupported("Undefined argument. Allowed arguments {}".format(", ".join(allowed)))
   if not sys.argv[1] in allowed:
     print("ZBX_NOTSUPPORTED: Unsupported argument {}".format(sys.argv[1]))
     sys.exit(1)
