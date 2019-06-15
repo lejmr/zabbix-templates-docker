@@ -3,6 +3,13 @@ import docker
 import json
 import sys
 import grp
+import os
+import pickle
+import time
+
+
+CACHE_PATH = "/tmp/"
+CACHE_TIME_S = 60
 
 
 def _zbx_unsupported(msg):
@@ -10,12 +17,27 @@ def _zbx_unsupported(msg):
   sys.exit(1)
 
 def get_discovery(client):
-  disc = [ {"#NAME":x.name, "#ID": x.id} for x in client.containers.list()]
-  return json.dumps({"DATA": disc})
+  disc = [ {"{#NAME}":x.name, "{#ID}": x.id} for x in client.containers.list()]
+  return json.dumps({"data": disc})
+
+def _cache_data(fp, client, contid):
+  x = client.containers.get(contid)
+  data = x.stats(stream=False, decode=True)
+  with open(fp, "w") as f:
+    pickle.dump(data, f)
+  return data
 
 def _get_stats(client, contid):
-  x = client.containers.get(contid)
-  return x.stats(stream=False, decode=True)
+  fp = os.path.join(CACHE_PATH, "zbx_docker_stats.cache")
+  if not os.path.exists(fp):   
+    return _cache_data(fp, client, contid)
+  if time.time() - os.stat(fp).st_mtime > CACHE_TIME_S:
+    return _cache_data(fp, client, contid)
+  with open(fp, "r") as f:
+    return pickle.load(f)
+
+def _get_attrs(client, contid):
+  return client.containers.get(contid).attrs
 
 def get_mem(client, contid, tp="usage"):
   stats = _get_stats(client, contid)
@@ -32,10 +54,10 @@ def get_mem(client, contid, tp="usage"):
     return stats["memory_stats"][tp][extp]
   return stats["memory_stats"][tp]
   
-def get_cpu(client, contid):
+def get_cpu(client, contid, tp="total_usage"):
   # https://github.com/moby/moby/blob/eb131c5383db8cac633919f82abad86c99bffbe5/cli/command/container/stats_helpers.go#L175
   stats = _get_stats(client, contid)
-  cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
+  cpu_delta = stats["cpu_stats"]["cpu_usage"][tp] - stats["precpu_stats"]["cpu_usage"][tp]
   system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
   return  100.0*cpu_delta/system_delta*len(stats["cpu_stats"]["cpu_usage"]["percpu_usage"])
 
@@ -59,6 +81,17 @@ def get_blkio(client, contid, metric="read"):
    _zbx_unsupported("unsupported metric {}".format(metric))
  return blkio[metric]
 
+def get_id(client, contid):
+  x = client.containers.get(contid)
+  return x.id
+
+def get_status(client, contid):
+  x = client.containers.get(contid)
+  return x.status
+
+def get_created(client, contid):
+  attrs = _get_attrs(client, contid)
+  return attrs["Created"]
  
 if __name__ == "__main__":
   # Validate access rights
@@ -70,7 +103,7 @@ if __name__ == "__main__":
   client = docker.from_env()
 
   # Handle arguments
-  allowed = ["discovery", "mem", "cpu", "net", "blkio"]
+  allowed = ["discovery", "mem", "cpu", "net", "blkio", "id", "status", "created"]
   if len(sys.argv) < 2:
     _zbx_unsupported("Undefined argument. Allowed arguments {}".format(", ".join(allowed)))
   if not sys.argv[1] in allowed:
