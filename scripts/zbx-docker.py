@@ -8,7 +8,7 @@ import pickle
 import time
 
 
-CACHE_PATH = "/tmp/"
+CACHE_PATH = "/var/run/zabbix"
 CACHE_TIME_S = 60
 
 
@@ -17,7 +17,7 @@ def _zbx_unsupported(msg):
   sys.exit(1)
 
 def get_discovery(client):
-  disc = [ {"{#NAME}":x.name, "{#ID}": x.id} for x in client.containers.list()]
+  disc = [ {"{#NAME}":x.name, "{#ID}": x.id} for x in client.containers.list(all=True)]
   return json.dumps({"data": disc})
 
 def _cache_data(fp, client, contid):
@@ -41,7 +41,6 @@ def _get_attrs(client, contid):
 
 def get_mem(client, contid, tp="usage"):
   stats = _get_stats(client, contid)
-  print(stats)
   extp = None
   if "/" in tp:
     tp, extp = tp.split("/")[:2]
@@ -51,7 +50,7 @@ def get_mem(client, contid, tp="usage"):
 
   if extp:
     if not extp in stats["memory_stats"][tp]: 
-      _zbx_unsupported("unsupported argument {}".format(extp))
+      return 0
     return stats["memory_stats"][tp][extp]
   return stats["memory_stats"][tp]
   
